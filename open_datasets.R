@@ -1,11 +1,14 @@
-library(dplyr)
+
 tmpdir <- tempdir()
-usethis::create_from_github()
+usethis::create_from_github("annakrystalli/debugging-arrow", destdir = tmpdir,
+                            fork = FALSE, open = FALSE)
 
+library(dplyr)
+origin_path <- file.path(tmpdir, "debugging-arrow/simple/model-output/")
 
-origin_path <- "simple/model-output/"
+fs::dir_tree(origin_path)
 
-# Open dataset excluding invalid files
+# Open one dataset foe each format excluding invalid files
 formats <- c("csv", "parquet")
 
 conns <- purrr::map(purrr::set_names(formats),
@@ -16,6 +19,7 @@ conns <- purrr::map(purrr::set_names(formats),
 
 
 arrow::open_dataset(conns, unify_schemas = FALSE)
+# Problem arising form mismatched int fields between the two datasets
 conns
 
 
@@ -37,18 +41,40 @@ get_unified_schema <- function(x, unified_schema) {
 
 # Get unified schema across all datasets
 unified_schema <- purrr::reduce(conns, unify_conn_schema)
+unified_schema
 
 # Get schema for each connection from unified schema
 conn_schema <- purrr::map(conns, ~get_unified_schema(.x,
                                                      unified_schema))
+
+conn_schema
+
+
+# Replacing the active binding via assignment doesn't seem to work
+purrr::map2(conns, conn_schema,
+            function(x, y){
+                x$schema <- y})
+
 # reconnect using appropriate schema for each connection
-conns <- purrr::map2(names(conns), conn_schema,
+conns_unified <- purrr::map2(names(conns), conn_schema,
                      ~arrow::open_dataset(
                          origin_path, format = .x,
                          partitioning = "team",
                          factory_options = list(exclude_invalid_files = TRUE),
                          schema = .y))
 
-conns
+conns_unified
 
-arrow::open_dataset(conns)
+# All schema are equal!
+all.equal(conns[[1]]$schema, conns_unified[[1]]$schema, conn_schema[[1]])
+
+
+arrow::open_dataset(conns_unified)
+
+
+
+arrow::open_dataset(
+    origin_path, format = "csv",
+    partitioning = "team",
+    factory_options = list(exclude_invalid_files = TRUE),
+    schema = conn_schema[[1]])

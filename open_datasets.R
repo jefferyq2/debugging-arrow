@@ -17,7 +17,8 @@ conns <- purrr::map(purrr::set_names(formats),
                         partitioning = "team",
                         factory_options = list(exclude_invalid_files = TRUE)))
 
-
+arrow::open_dataset(conns)
+arrow::open_dataset(conns, unify_schemas = TRUE)
 arrow::open_dataset(conns, unify_schemas = FALSE)
 # Problem arising form mismatched int fields between the two datasets
 conns
@@ -68,13 +69,12 @@ conns_unified
 # All schema are equal!
 all.equal(conns[[1]]$schema, conns_unified[[1]]$schema, conn_schema[[1]])
 
+# opening dataset from unified connections does not return data form csv file
+arrow::open_dataset(conns_unified)  %>%
+    filter(origin_date == "2022-10-08") %>%
+    collect()
 
-arrow::open_dataset(conns_unified)
-
-
-
-arrow::open_dataset(
-    origin_path, format = "csv",
-    partitioning = "team",
-    factory_options = list(exclude_invalid_files = TRUE),
-    schema = conn_schema[[1]])
+# Only data from the single parquet file returned
+arrow::open_dataset(conns_unified)  %>%
+    filter(origin_date == "2022-10-15") %>%
+    collect()
